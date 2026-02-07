@@ -234,13 +234,10 @@ def parse_showtimes(html_src: str) -> list[CalEvent]:
       # not a list of showtimes
       continue
     for item in obj:
-      if not isinstance(item, dict):
+      if not isinstance(item, dict) or item.get('@type') != 'VisualArtsEvent':
         # not a showtime
         continue
       try:
-        if item.get('@type') != 'VisualArtsEvent':
-          # not a showtime
-          continue
         showtime = films[item['name']]
         endDate = datetime.fromisoformat(item['startDate'])
         for m in re.findall(r'(\d+)([A-Z])', item['duration']):
@@ -259,38 +256,41 @@ def parse_showtimes(html_src: str) -> list[CalEvent]:
 
 
 def update_events(ctx: Context, cal: GCal) -> None:
-  """Diff published and fresh showtimes."""
+  """
+  Diff published and fresh showtimes.
+  
+  NOTE: will only update calenar entries within the time window of the
+  showtimes listings.
+  """
   cal_events = read_calendar_events(ctx, cal)
   showtimes = read_showtimes(ctx)
 
   to_create: list[CalEvent] = []
-  to_delete: list[str] = []
+  to_delete: list[CalEvent] = []
   cal_map = {e.hash: e for e in cal_events}
   st_map = {e.hash: e for e in showtimes}
   start_time = min([e.start.get_time() for e in showtimes])
   end_time = max([e.start.get_time() for e in showtimes])
-  eprint('Start time:', start_time)
-  eprint('End time:', end_time)
   for key, event in st_map.items():
     dt = event.start.get_time()
     if dt < start_time > dt  or dt > end_time:
-      # skip events outside our window
       continue
     if key not in cal_map:
-      eprint(f'Adding event {event}')
       to_create.append(event)
   for key, event in cal_map.items():
     dt = event.start.get_time()
     if dt < start_time or dt > end_time:
-      # skip events outside our window
       continue
     if key not in st_map:
-      eprint(f'Deleting event {event}')
-      to_delete.append(event.id or '')
-  eprint(f'Successfully wrote events: {json.dumps([
-    e.htmlLink for e in write_events(ctx, cal, to_create)])}')
-  delete_events(ctx, cal, to_delete)
-  eprint(f'Deleted {len(to_delete)} events')
+      to_delete.append(event)
+  if to_create:
+    eprint(f'added events: {pjson([
+      f'{e} {e.htmlLink}' 
+      for e in write_events(ctx, cal, to_create)
+    ])}')
+  if to_delete:
+    delete_events(ctx, cal, [cast(str, e.id) for e in to_delete])
+    eprint(f'deleted events: {pjson([str(e) for e in to_delete])}')
 
 ActionFunc = Callable[[Context, GCal, str|Sequence[Any]|None], None]
 def action_wrap(func: ActionFunc):
