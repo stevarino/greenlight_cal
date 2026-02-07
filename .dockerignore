@@ -1,0 +1,12 @@
+.git
+.gitignore
+.gitattributes
+.env
+**/*.json
+**/*.html
+env/
+data/
+LICENSE
+README.md
+example.env
+__pycache__

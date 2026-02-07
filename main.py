@@ -3,8 +3,6 @@
 """
 greenlight_cal/main.py: Sync Green Light Cinema showtimes to Google GCal.
 
-How to use:
-
 Create a calendar:
   python main.py --credentials_file path/to/credentials.json --create_calendar > calendar_id.txt
 
@@ -22,12 +20,19 @@ Inspect the calendar ACL:
 Update the calendar with current showtimes:
   python main.py --diff
 
+Environment variables:
+
+ - CALENDAR_ID - The ID of the calendar.
+ - CREDENTIALS_FILE - The location of the credentials file for the service
+   account.
+ - CREDENTIALS_JSON - The credentials JSON file contents.
+
 See --help for more options.
 """
 
 from dataclasses import dataclass, asdict, field, fields
 from datetime import datetime, timedelta, timezone
-from typing import Any, Self, ClassVar
+from typing import Any, Self, ClassVar, cast
 from urllib.error import URLError
 import argparse
 import gzip
@@ -36,6 +41,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import urllib.request
 
 from bs4 import BeautifulSoup, Tag
@@ -233,7 +239,7 @@ def parse_showtimes(html_src: str) -> list[CalEvent]:
   return listings
 
 
-def update_events(ctx: Context, cal: GCal, cal_events: list[CalEvent], showtimes: list[CalEvent]) -> tuple[list[CalEvent], list[str]]:
+def update_events(ctx: Context, cal: GCal, cal_events: list[CalEvent], showtimes: list[CalEvent]) -> None:
   """Diff published and fresh showtimes."""
   to_create: list[CalEvent] = []
   to_delete: list[str] = []
@@ -252,7 +258,6 @@ def update_events(ctx: Context, cal: GCal, cal_events: list[CalEvent], showtimes
       eprint(f'Adding event {event}')
       to_create.append(event)
   for key, event in cal_map.items():
-    eprint('  ', event.hash, end='')
     dt = event.start.get_time()
     if dt < start_time or dt > end_time:
       # skip events outside our window
@@ -260,36 +265,38 @@ def update_events(ctx: Context, cal: GCal, cal_events: list[CalEvent], showtimes
     if key not in st_map:
       eprint(f'Deleting event {event}')
       to_delete.append(event.id or '')
-  write_events(ctx, cal, to_create)
+  eprint(f'Successfully wrote events: {json.dumps([
+    e.htmlLink for e in write_events(ctx, cal, to_create)])}')
   delete_events(ctx, cal, to_delete)
-  return to_create, to_delete
+  eprint(f'Deleted {len(to_delete)} events')
 
 
 def main(nargs: list[str]):
-  parser = argparse.ArgumentParser(description='Sync Green Light Cinema showtimes to Google GCal')
+  parser = argparse.ArgumentParser()
   # global arguments
   parser.add_argument('--calendar_id', type=str, help='The ID of the calendar to use. Can be omitted if CALENDAR_ID environment variable is set or specified in .env file.')
   parser.add_argument('--credentials_file', type=str, help='Path to the service account credentials JSON file. Can be omitted if CREDENTIALS_FILE environment variable is set or specified in .env file.')
 
   # Testing arguments
   parser.add_argument('--dry_run', action='store_true', help='Run in dry-run mode. No external calls will be made.')
-  parser.add_argument('--calendar_file', type=str, help='Path to a JSON file containing calendar events for testing.')
-  parser.add_argument('--showtimes_file', type=str, help='Path to a JSON file containing showtimes data for testing.')
-  parser.add_argument('--showtimes_html_file', type=str, help='Path to an HTML file containing showtimes page data for testing.')
+  parser.add_argument('--calendar_file', type=str, help='(Testing) Path to a JSON file containing calendar events.')
+  parser.add_argument('--showtimes_file', type=str, help='(Testing) Path to a JSON file containing showtimes data.')
+  parser.add_argument('--showtimes_html_file', type=str, help='(Testing) Path to an HTML file containing showtimes page data.')
 
   # Manage calendars
-  parser.add_argument('--create_calendar', action='store_true', help='Create a new calendar and print its ID.')
+  parser.add_argument('--list_calendars', action='store_true', help="List all calendars the credentialed user has access to.")
+  parser.add_argument('--create_calendar', type=str, help='Create a new calendar and print its ID.')
+  parser.add_argument('--delete_calendar', action='store_true', help='Delete the specified calendar.')
   parser.add_argument('--print_acl', action='store_true', help='Print the ACL of the calendar.')
   parser.add_argument('--add_writer', type=str, help='Add a user to the calendar ACL with the given email address.')
   parser.add_argument('--remove_writer', type=str, help='Remove a user from the calendar ACL with the given email address.')
   parser.add_argument('--add_owner', type=str, help='Add an owner to the calendar ACL with the given email address.')
   parser.add_argument('--remove_owner', type=str, help='Remove an owner from the calendar ACL with the given email address.')
 
-  # subcommands
+  # Manage events
   parser.add_argument('--read_calendar', action='store_true', help='Read and print existing calendar events.')
   parser.add_argument('--read_showtimes', action='store_true', help='Read and print existing showtimes.')
   parser.add_argument('--delete', nargs='+', help='Delete calendar events with the given IDs.')
-  parser.add_argument('--write', action='store_true', help='Write new calendar events.')
   parser.add_argument('--update', action='store_true', help='Diff existing calendar events with current showtimes and update accordingly.')
   parser.add_argument('--clear', action='store_true', help='Clear all existing calendar events.')
 
@@ -301,6 +308,20 @@ def main(nargs: list[str]):
   calendar_id = args.calendar_id or os.getenv('CALENDAR_ID') or None
   credentials_file = args.credentials_file or os.getenv('CREDENTIALS_FILE') or None
   
+  credentials_json = os.getenv('CREDENTIALS_JSON')
+  
+  temp_file = tempfile.NamedTemporaryFile(delete_on_close=False)
+  try:
+    if credentials_json:
+      credentials_file = temp_file.name
+      with open(credentials_file, 'wb') as fp:
+        fp.write(credentials_json.encode())
+    execute(calendar_id, credentials_file, dry_run, args)
+  finally:
+    os.remove(temp_file.name)
+
+
+def execute(calendar_id: str|None, credentials_file: str|None, dry_run: bool, args: Any):
   cal = GCal(
     calendar_id = calendar_id if not dry_run else None,
     credentials_file = credentials_file if not dry_run else None,
@@ -311,8 +332,13 @@ def main(nargs: list[str]):
   if dry_run:
     eprint('=== DRY RUN ENABLED ===')
 
-  if args.create_calendar:
-    print(cal.create_calendar('Green Light Cinema Showtimes'))
+  if args.list_calendars:
+    print(json.dumps(cal.list_calendars(), indent=2))
+  if args.create_calendar is not None:
+    print(cal.create_calendar(
+      args.create_calendar or 'Green Light Cinema Showtimes'))
+  if args.delete_calendar:
+    cal.delete_calendar()
   if args.add_writer:
     cal.add_writer(args.add_writer)
   if args.remove_writer:
@@ -321,7 +347,10 @@ def main(nargs: list[str]):
     cal.add_owner(args.add_owner)
   if args.remove_owner:
     cal.remove_owner(args.remove_owner)
-  if args.create_calendar or args.add_writer or args.remove_writer or args.add_owner or args.remove_owner:
+  if not all((arg is None or arg == False for arg in [
+    args.list_calendars, args.create_calendar, args.delete_calendar,
+    args.add_writer, args.remove_writer, args.add_owner, args.remove_owner
+  ])):
     return
 
 

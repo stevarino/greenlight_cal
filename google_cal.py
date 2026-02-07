@@ -145,7 +145,6 @@ class GCal:
         calendarId=self.calendar_id,
         eventId=event_id,
       ).execute()
-    eprint(f"Events deleted: {', '.join(event_ids)}")
 
 
   def write_events(self, events: list[CalEvent]) -> list[CalEvent]:
@@ -161,6 +160,14 @@ class GCal:
         supportsAttachments=True,
       ).execute())
     return [CalEvent.from_dict(e) for e in new_events]
+
+
+  def list_calendars(self) -> list[str]:
+    if self.dry_run:
+      eprint('Dry run: would list calendars')
+      return []
+    req = self.service.calendarList().list().execute()
+    return req['items']
 
 
   def create_calendar(self, description) -> str:
@@ -179,6 +186,15 @@ class GCal:
     })
     eprint("Calendar ACL updated to allow public read access")
     return self._calendar_id
+
+
+  def delete_calendar(self):
+    """Delete the currentcalendar."""
+    if self.dry_run:
+      eprint(f"Dry run: Calendar {self.calendar_id} would be deleted")
+    res = self.service.calendars().delete(
+      calendarId=self.calendar_id).execute()
+    eprint(f'Calendar deleted.')
 
 
   def get_acls(self):

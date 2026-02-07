@@ -24,3 +24,54 @@ credentials file and reference the file via command line flag, environment
 variable, or `.env` file (see `--help` for more info).
 
 Supports JSON outputting for caching, exploring, and debugging.
+
+## Docker
+
+Build the image as follows:
+
+```bash
+docker build -t greenlight_cal .
+```
+
+Then run the container, setting the environment variable `CALENDAR_ID`
+to the appropriate Calender ID and setting up the service worker credential
+file as `credentials.json`:
+
+```bash
+docker run --rm \
+    -e="CREDENTIALS_JSON=$(< credentials.json)" \
+    -e="CALENDAR_ID=${CALENDAR_ID:??}" \
+    greenlight_cal --list_calendars
+```
+
+This command should output all available calendars the service account
+has access to.
+
+To create a calender:
+
+```bash
+docker run --rm \
+    -e="CREDENTIALS_JSON=$(< credentials.json)" \
+    greenlight_cal --create_calendar "My Calendar"
+```
+
+This should spit out a Calendar ID. And give yourself access to the
+calendar:
+
+```bash
+docker run --rm \
+    -e="CREDENTIALS_JSON=$(< credentials.json)" \
+    -e="CALENDAR_ID=${CALENDAR_ID:??}" \
+    greenlight_cal --add_owner me@gmail.com
+```
+
+And all that's left is to sync the events:
+
+```bash
+docker run --rm \
+    -e="CREDENTIALS_JSON=$(< credentials.json)" \
+    -e="CALENDAR_ID=${CALENDAR_ID:??}" \
+    greenlight_cal --update
+```
+
+
