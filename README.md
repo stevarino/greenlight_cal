@@ -25,6 +25,35 @@ variable, or `.env` file (see `--help` for more info).
 
 Supports JSON outputting for caching, exploring, and debugging.
 
+More info:
+
+```
+python3 main.py
+```
+
+Or:
+
+```
+python3 main.py --help
+```
+
+## Environment Variables
+
+### CALENDAR_ID
+
+The ID of the calendar. Equivalent to passing `--calendar_id` if you prefer.
+
+### CREDENTIALS_FILE
+
+The location of the credentials file for the service account. Not recommended
+for Docker setups though as embedding secrets in Images is a bad habit.
+
+### CREDENTIALS_JSON
+
+The credentials JSON file contents, useful for passing service account
+credentials into a container. See the Docker section below for examples.
+
+
 ## Docker
 
 Build the image as follows:
@@ -40,7 +69,7 @@ file as `credentials.json`:
 ```bash
 docker run --rm \
     -e="CREDENTIALS_JSON=$(< credentials.json)" \
-    -e="CALENDAR_ID=${CALENDAR_ID:??}" \
+    -e="CALENDAR_ID=${CALENDAR_ID:?}" \
     greenlight_cal calendar --list
 ```
 
@@ -58,7 +87,7 @@ This should spit out a Calendar ID. To give yourself access to that calendar:
 ```bash
 docker run --rm \
     -e="CREDENTIALS_JSON=$(< credentials.json)" \
-    -e="CALENDAR_ID=${CALENDAR_ID:??}" \
+    -e="CALENDAR_ID=${CALENDAR_ID:?}" \
     greenlight_cal calendar --add_owner me@gmail.com
 ```
 
@@ -67,7 +96,7 @@ And all that's left is to sync the events:
 ```bash
 docker run --rm \
     -e="CREDENTIALS_JSON=$(< credentials.json)" \
-    -e="CALENDAR_ID=${CALENDAR_ID:??}" \
+    -e="CALENDAR_ID=${CALENDAR_ID:?}" \
     greenlight_cal events --update
 ```
 
