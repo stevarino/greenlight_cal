@@ -95,16 +95,14 @@ class CalEvent:
 
 class GCal:
   """Interface for interacting with Google Calendar."""
-  def __init__(self, calendar_id: str|None, credentials_file: str|None, dry_run: bool = False):
-    self._calendar_id = calendar_id
-    self.credentials_file = credentials_file
+  def __init__(self, calendar_id: str|None, credentials: dict|None, dry_run: bool = False):
+    self._calendar_id = calendar_id if not dry_run else None    
     self.dry_run = dry_run
     self.now = datetime.now(tz=timezone.utc)
     self._service = None
-    if dry_run or not credentials_file:
-      return
-    creds = Credentials.from_service_account_file(credentials_file)
-    self._service = build("calendar", "v3", credentials=creds)
+    if not dry_run and credentials:
+      creds = Credentials.from_service_account_info(credentials)
+      self._service = build("calendar", "v3", credentials=creds)
   
 
   @property

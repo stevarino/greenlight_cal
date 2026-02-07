@@ -41,28 +41,25 @@ file as `credentials.json`:
 docker run --rm \
     -e="CREDENTIALS_JSON=$(< credentials.json)" \
     -e="CALENDAR_ID=${CALENDAR_ID:??}" \
-    greenlight_cal --list_calendars
+    greenlight_cal calendar --list
 ```
 
-This command should output all available calendars the service account
-has access to.
-
-To create a calender:
+This command should output all available calendars the service account has
+access to. To create a calender:
 
 ```bash
 docker run --rm \
     -e="CREDENTIALS_JSON=$(< credentials.json)" \
-    greenlight_cal --create_calendar "My Calendar"
+    greenlight_cal calendar --create "My Calendar"
 ```
 
-This should spit out a Calendar ID. And give yourself access to the
-calendar:
+This should spit out a Calendar ID. To give yourself access to that calendar:
 
 ```bash
 docker run --rm \
     -e="CREDENTIALS_JSON=$(< credentials.json)" \
     -e="CALENDAR_ID=${CALENDAR_ID:??}" \
-    greenlight_cal --add_owner me@gmail.com
+    greenlight_cal calendar --add_owner me@gmail.com
 ```
 
 And all that's left is to sync the events:
@@ -71,7 +68,7 @@ And all that's left is to sync the events:
 docker run --rm \
     -e="CREDENTIALS_JSON=$(< credentials.json)" \
     -e="CALENDAR_ID=${CALENDAR_ID:??}" \
-    greenlight_cal --update
+    greenlight_cal events --update
 ```
 
 
